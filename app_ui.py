@@ -55,6 +55,7 @@ def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature, p
     if not text or not text.strip():
         raise gr.Error("Please enter some text.")
     print(f"[chatterbox] request: lang={language} max_words={int(max_words)} pause_ms={int(pause_ms)}")
+    print(f"[chatterbox] text repr: {text!r}")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = settings.output_dir / f"{language}_{ts}.wav"
     path = ENGINE.synthesize_long(

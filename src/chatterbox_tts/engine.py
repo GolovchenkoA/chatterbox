@@ -18,7 +18,7 @@ from .config import settings, SUPPORTED
 
 
 class TTSEngine:
-    def __init__(self, device: Optional[str] = None):
+    def __init__(self, device: Optional[str] = None, t3_model: Optional[str] = None):
         import torch  # local import so config env vars are set first
 
         self.device = device or settings.resolve_device()
@@ -30,8 +30,14 @@ class TTSEngine:
 
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
-        print(f"[chatterbox] loading model to {self.device} (downloads weights on first run only)...")
-        self.model = ChatterboxMultilingualTTS.from_pretrained(device=self.device)
+        self.t3_model = t3_model or settings.t3_model  # "v2" (legacy) or "v3"
+        print(
+            f"[chatterbox] loading model {self.t3_model} to {self.device} "
+            "(downloads weights on first run only)..."
+        )
+        self.model = ChatterboxMultilingualTTS.from_pretrained(
+            device=self.device, t3_model=self.t3_model
+        )
         self.sr = self.model.sr
         print("[chatterbox] model ready.")
 

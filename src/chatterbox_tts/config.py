@@ -16,6 +16,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+class _DropRuStresserWarning(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "russian_text_stresser not available" not in record.getMessage()
+
+
 def _quiet_upstream_noise() -> None:
     """Hide harmless third-party warnings so real messages stand out."""
     # diffusers FutureWarning about LoRACompatibleLinear (not actionable here).
@@ -23,6 +28,10 @@ def _quiet_upstream_noise() -> None:
     warnings.filterwarnings("ignore", message=r".*torch.backends.cuda.sdp_kernel.*")
     # HF Hub "unauthenticated requests" notice (only affects download rate limits).
     logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+    # Chatterbox's own tokenizer warns that `russian_text_stresser` is missing on every
+    # RU request. Redundant: ru_stress.py (ruaccent) already added the stress marks.
+    # Only this one message is dropped; other tokenizer warnings still show.
+    logging.getLogger("chatterbox.models.tokenizers.tokenizer").addFilter(_DropRuStresserWarning())
 
 
 if os.environ.get("CHATTERBOX_QUIET", "1") not in ("0", "false", "False"):
@@ -65,6 +74,9 @@ class Settings:
     exaggeration: float = float(os.environ.get("CHATTERBOX_EXAGGERATION", "0.5"))
     cfg_weight: float = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.5"))
     temperature: float = float(os.environ.get("CHATTERBOX_TEMPERATURE", "0.8"))
+    # Multilingual T3 checkpoint: "v3" (recommended, better accent/speaker similarity)
+    # or "v2" (legacy). Override with env var CHATTERBOX_T3_MODEL.
+    t3_model: str = os.environ.get("CHATTERBOX_T3_MODEL", "v3")
     # Max characters per generate() call (model is trained for short spans).
     max_chars: int = int(os.environ.get("CHATTERBOX_MAX_CHARS", "300"))
 
