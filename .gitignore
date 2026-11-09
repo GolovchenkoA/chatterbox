@@ -25,6 +25,7 @@ outputs/
 
 # Reference voices you may add locally
 voices/
+text-examples/
 
 # OS / IDE
 .DS_Store

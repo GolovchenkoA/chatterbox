@@ -16,6 +16,11 @@ dependencies = [
 [project.optional-dependencies]
 ollama = ["requests>=2.31"]
 ui = ["gradio==6.8.0"]
+# Russian lexical stress (ударение) correction. Chatterbox expects stress-marked
+# Russian text; ruaccent supplies the marks. Strongly recommended for `ru`.
+ru = ["ruaccent"]
+# Accept compressed reference clips (.m4a/.mp3/.aac) via a bundled FFmpeg binary.
+audio = ["imageio-ffmpeg"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

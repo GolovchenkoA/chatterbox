@@ -1,10 +1,10 @@
-# Chatterbox Multilingual TTS — Local (EN / PL, CUDA)
+# Chatterbox Multilingual TTS — Local (EN / PL / RU, CUDA)
 
 Local, GPU-accelerated text-to-speech using
 [Resemble AI Chatterbox Multilingual](https://github.com/resemble-ai/chatterbox),
 configured for an **NVIDIA RTX 5060 Laptop GPU** (Blackwell, CUDA 12.8) and scoped
-to **English** and **Polish**. Everything — virtualenv, model cache, and output
-audio — stays inside this project folder.
+to **English**, **Polish**, and **Russian**. Everything — virtualenv, model cache,
+and output audio — stays inside this project folder.
 
 See [`Requirements.md`](Requirements.md) for the full hardware/software matrix and
 the Blackwell CUDA constraint.
@@ -67,10 +67,19 @@ python examples/synthesize.py --demo
 # Custom text
 python examples/synthesize.py --lang en --text "Hello from my GPU."
 python examples/synthesize.py --lang pl --text "Dzien dobry, to jest test."
+python examples/synthesize.py --lang ru --text "Privet, eto test."
 
 # Clone a voice from a reference clip (match the language)
 python examples/synthesize.py --lang pl --text "..." --voice voices/ref.wav
+
+# Pauses: silence between sentences + custom gaps with [pause:ms] or ||
+python examples/synthesize.py --lang en --pause-ms 500 \
+  --text "First. Second. [pause:1000] After a long pause. || Quick gap here."
 ```
+
+Long text is auto-split into sentences and stitched with silence (also bypasses
+the ~300-char limit). See [`Notes.md`](Notes.md) for pause markers and tips on
+getting natural-sounding voices.
 
 ### Web UI (no code)
 
@@ -81,8 +90,8 @@ A local Gradio browser interface (reuses the same GPU engine, EN/PL):
 python app_ui.py
 ```
 
-Opens http://127.0.0.1:7860 — enter text, pick English/Polish, optionally upload a
-reference voice, click **Generate**. Output also saved to `outputs/`.
+Opens http://127.0.0.1:7860 — enter text, pick English/Polish/Russian, optionally
+upload a reference voice, click **Generate**. Output also saved to `outputs/`.
 (gradio is installed; the `ui` extra `pip install -e .[ui]` pins it too.)
 
 From Python:
@@ -109,6 +118,22 @@ from chatterbox_tts import TTSEngine
 text = generate_text("Napisz jedno zdanie powitania.", model="llama3.1:8b")
 TTSEngine().synthesize(text, "pl", "outputs/llm_pl.wav")
 ```
+
+## Russian stress (ударение)
+
+Chatterbox's Russian needs **stress-marked** text or it guesses stress wrongly
+(за́мок vs замо́к). This project auto-inserts the stress marks (U+0301) with
+[`ruaccent`](https://github.com/Den4ikAI/ruaccent) — applied automatically for
+`--lang ru` / the RU dropdown. The accent model downloads once into `.cache/`.
+
+```bash
+pip install -e .[ru]      # or: pip install ruaccent
+```
+
+- Enabled by default. Disable with env var `CHATTERBOX_RU_ACCENT=0`.
+- If `ruaccent` isn't installed, Russian still synthesizes but stress is uncorrected.
+- Fix a specific word ruaccent gets wrong by writing the mark yourself: put the
+  combining acute `U+0301` right after the stressed vowel.
 
 ## Project layout
 

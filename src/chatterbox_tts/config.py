@@ -9,9 +9,24 @@ chatterbox / transformers are imported, so no global user cache is touched.
 """
 from __future__ import annotations
 
+import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _quiet_upstream_noise() -> None:
+    """Hide harmless third-party warnings so real messages stand out."""
+    # diffusers FutureWarning about LoRACompatibleLinear (not actionable here).
+    warnings.filterwarnings("ignore", message=r".*LoRACompatibleLinear.*")
+    warnings.filterwarnings("ignore", message=r".*torch.backends.cuda.sdp_kernel.*")
+    # HF Hub "unauthenticated requests" notice (only affects download rate limits).
+    logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
+
+
+if os.environ.get("CHATTERBOX_QUIET", "1") not in ("0", "false", "False"):
+    _quiet_upstream_noise()
 
 # <project> = two levels up from this file (src/chatterbox_tts/config.py)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +51,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 SUPPORTED = {
     "en": "English",
     "pl": "Polish",
+    "ru": "Russian",
 }
 
 

@@ -9,6 +9,7 @@ Example
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -29,7 +30,7 @@ class TTSEngine:
 
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
-        print(f"[chatterbox] loading model to {self.device} (first run downloads weights)...")
+        print(f"[chatterbox] loading model to {self.device} (downloads weights on first run only)...")
         self.model = ChatterboxMultilingualTTS.from_pretrained(device=self.device)
         self.sr = self.model.sr
         print("[chatterbox] model ready.")
@@ -62,19 +63,65 @@ class TTSEngine:
         `audio_prompt_path` (optional) is a reference clip to clone the voice;
         it should match the target language for best results.
         """
-        import soundfile as sf
+        if language not in SUPPORTED:
+            raise ValueError(
+                f"Language '{language}' not configured. Options: {list(SUPPORTED)}"
+            )
+        if len(text) > settings.max_chars:
+            print(
+                f"[chatterbox] text > {settings.max_chars} chars; "
+                "use synthesize_long() to split into sentences for best quality."
+            )
+        gen = self._gen_kwargs(language, audio_prompt_path, exaggeration, cfg_weight, temperature)
+        audio = self._render(text, language, gen)
+        return self._save(audio, out or settings.output_dir / f"{language}_output.wav")
+
+    def synthesize_long(
+        self,
+        text: str,
+        language: str = "en",
+        out: str | Path | None = None,
+        pause_ms: int = 400,
+        sentence_pause_ms: int | None = None,
+        audio_prompt_path: str | Path | None = None,
+        exaggeration: float | None = None,
+        cfg_weight: float | None = None,
+        temperature: float | None = None,
+        trim_db: float | None = 30.0,
+    ) -> Path:
+        """Synthesize arbitrarily long text with controllable pauses.
+
+        - Splits text into sentences and inserts `sentence_pause_ms` of silence
+          between them (defaults to `pause_ms`). Also avoids the ~300-char limit.
+        - Insert a custom pause anywhere with a marker:
+            `[pause:800]`  -> 800 ms of silence
+            `||`           -> `pause_ms` of silence
+        - `trim_db`: trim each clip's leading/trailing silence at this threshold
+          so the *inserted* pause is the real gap (the model pads clips with
+          ~0.5-1 s of silence otherwise). Set None to disable trimming.
+        """
+        import numpy as np
 
         if language not in SUPPORTED:
             raise ValueError(
                 f"Language '{language}' not configured. Options: {list(SUPPORTED)}"
             )
+        sent_pause = pause_ms if sentence_pause_ms is None else sentence_pause_ms
+        gen = self._gen_kwargs(language, audio_prompt_path, exaggeration, cfg_weight, temperature)
 
-        if len(text) > settings.max_chars:
-            print(
-                f"[chatterbox] text > {settings.max_chars} chars; "
-                "consider splitting into sentences for best quality."
-            )
+        pieces: list = []
+        for kind, val in split_segments(text, pause_ms=pause_ms, sentence_pause_ms=sent_pause):
+            if kind == "pause":
+                pieces.append(self._silence(val))
+            else:
+                print(f"[chatterbox] rendering: '{val[:60]}'")
+                pieces.append(self._trim(self._render(val, language, gen), trim_db))
 
+        audio = np.concatenate(pieces) if pieces else np.zeros(1, dtype="float32")
+        return self._save(audio, out or settings.output_dir / f"{language}_long.wav")
+
+    # --- internals -------------------------------------------------------
+    def _gen_kwargs(self, language, audio_prompt_path, exaggeration, cfg_weight, temperature):
         kwargs = dict(
             language_id=language,
             exaggeration=exaggeration if exaggeration is not None else settings.exaggeration,
@@ -82,19 +129,85 @@ class TTSEngine:
             temperature=temperature if temperature is not None else settings.temperature,
         )
         if audio_prompt_path:
-            kwargs["audio_prompt_path"] = str(audio_prompt_path)
+            from .audio_io import ensure_wav
 
-        wav = self.model.generate(text, **kwargs)
+            # Accept .m4a/.mp3/etc. by transcoding to WAV (soundfile can't read them).
+            kwargs["audio_prompt_path"] = ensure_wav(audio_prompt_path)
+        return kwargs
 
-        if out is None:
-            out = settings.output_dir / f"{language}_output.wav"
+    def _render(self, text, language, gen_kwargs):
+        """Generate one chunk and return a 1-D float32 numpy waveform."""
+        if language == "ru":
+            from .ru_stress import add_stress
+
+            text = add_stress(text)
+        wav = self.model.generate(text, **gen_kwargs)
+        return wav.detach().cpu().numpy().astype("float32").squeeze()
+
+    def _trim(self, audio, trim_db):
+        """Trim leading/trailing silence so inserted pauses are the real gap.
+
+        Keeps a small guard (~15 ms) at each edge so word onsets aren't clipped.
+        """
+        if trim_db is None:
+            return audio
+        import librosa
+        import numpy as np
+
+        _, idx = librosa.effects.trim(audio, top_db=trim_db)
+        guard = int(self.sr * 0.015)
+        start = max(0, idx[0] - guard)
+        end = min(len(audio), idx[1] + guard)
+        out = audio[start:end]
+        return out if out.size else audio
+
+    def _silence(self, ms: int):
+        import numpy as np
+
+        return np.zeros(int(self.sr * max(0, ms) / 1000), dtype="float32")
+
+    def _save(self, audio, out):
+        import soundfile as sf
+
         out = Path(out)
         out.parent.mkdir(parents=True, exist_ok=True)
         # soundfile avoids torchaudio 2.11's torchcodec/FFmpeg backend dependency.
-        audio = wav.detach().cpu().numpy().squeeze()  # [1, N] -> [N]
         sf.write(str(out), audio, self.sr)
         print(f"[chatterbox] saved -> {out}")
         return out
+
+
+# Sentence splitter: break after . ! ? … (keeping the punctuation) and on newlines.
+_SENT_SPLIT = re.compile(r"(?<=[.!?…。！？])\s+|\n+")
+# Explicit pause markers: [pause:NUMBER] or ||
+_PAUSE_MARK = re.compile(r"(\[pause:(\d+)\]|\|\|)")
+
+
+def split_segments(text: str, pause_ms: int = 400, sentence_pause_ms: int = 400):
+    """Yield ('speak', chunk) / ('pause', ms) segments from text.
+
+    Explicit markers ([pause:N], ||) produce pauses; everything else is split
+    into sentences separated by `sentence_pause_ms` of silence.
+    """
+    segments: list[tuple[str, object]] = []
+    for part in _PAUSE_MARK.split(text):
+        if part is None or part == "":
+            continue
+        if part == "||":
+            segments.append(("pause", pause_ms))
+            continue
+        m = re.fullmatch(r"\[pause:(\d+)\]", part)
+        if m:
+            segments.append(("pause", int(m.group(1))))
+            continue
+        if part.isdigit():  # the capture group of the ms number — skip it
+            continue
+        sentences = [s.strip() for s in _SENT_SPLIT.split(part) if s.strip()]
+        for i, s in enumerate(sentences):
+            if i > 0:
+                segments.append(("pause", sentence_pause_ms))
+            segments.append(("speak", s))
+    return segments
 
 
 # Module-level convenience (loads the model each call; prefer TTSEngine for reuse).

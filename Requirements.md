@@ -1,7 +1,7 @@
 # Requirements
 
 Local setup of **Chatterbox Multilingual TTS** (Resemble AI) configured for an
-NVIDIA **RTX 5060 Laptop GPU** with CUDA, scoped to **English** and **Polish**.
+NVIDIA **RTX 5060 Laptop GPU** with CUDA, scoped to **English**, **Polish**, and **Russian**.
 Everything (venv, model cache, outputs) lives inside this project folder.
 
 ---
@@ -81,6 +81,7 @@ Configured codes (Chatterbox Multilingual supports 23 total):
 |------|----------|
 | `en` | English  |
 | `pl` | Polish   |
+| `ru` | Russian  |
 
 ## 6. Ollama (optional)
 

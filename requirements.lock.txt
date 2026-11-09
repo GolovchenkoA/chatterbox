@@ -22,6 +22,7 @@ einops==0.8.2
 fastapi==0.162.2
 ffmpy==1.0.0
 filelock==4.2.4
+flatbuffers==25.12.19
 fsspec==2026.9.0
 gradio==6.8.0
 gradio_client==2.2.0
@@ -33,6 +34,7 @@ httpx==0.28.1
 huggingface_hub==1.33.0
 identify==2.6.20
 idna==3.20
+imageio-ffmpeg==0.8.1
 importlib_metadata==10.1.0
 jaconv==0.5.0
 Jinja2==3.1.6
@@ -53,6 +55,7 @@ numba==0.68.1
 numpy==1.26.4
 omegaconf==2.4.0
 onnx==1.23.2
+onnxruntime==1.31.1
 opentelemetry-api==1.45.2
 orjson==3.13.0
 packaging==26.3
@@ -69,21 +72,25 @@ pydub==0.25.1
 Pygments==2.21.0
 pykakasi==2.3.0
 pyloudnorm==0.2.0
+python-crfsuite==0.9.12
 python-dateutil==4.0.0
 python-discovery==1.9.5
 python-multipart==0.0.33
 pytz==2026.6
 PyYAML==6.0.3
+razdel==0.5.0
 regex==2026.11.9
 requests==2.34.2
 resemble-perth @ git+https://github.com/resemble-ai/Perth.git@ff1c8ac55a976971245cdd53c18d6131ca00d993
 rich==15.0.0
+ruaccent==1.5.8.3
 s3tokenizer==0.3.0
 safehttpx==0.1.7
 safetensors==0.5.3
 scikit-learn==1.9.1
 scipy==1.17.1
 semantic-version==2.10.0
+sentencepiece==0.2.3
 shellingham==1.5.4
 soundfile==0.14.0
 soxr==1.1.0

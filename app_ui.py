@@ -16,14 +16,31 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
+import logging  # noqa: E402
+
 import gradio as gr  # noqa: E402
 
 from chatterbox_tts import TTSEngine, settings, SUPPORTED  # noqa: E402
+
+
+class _IgnoreConnReset(logging.Filter):
+    """Drop the benign Windows 'ConnectionResetError [WinError 10054]' asyncio
+    noise gradio prints when a browser tab/socket closes — not a real error."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(s in msg for s in (
+            "ConnectionResetError", "_call_connection_lost", "WinError 10054",
+        ))
+
+
+logging.getLogger("asyncio").addFilter(_IgnoreConnReset())
 
 # Default sample text per language.
 DEFAULTS = {
     "en": "Last month we reached two billion views on our YouTube channel.",
     "pl": "W zeszlym miesiacu osiagnelismy dwa miliardy wyswietlen na naszym kanale YouTube.",
+    "ru": "В прошлом месяце мы достигли нового рубежа: два миллиарда просмотров на нашем YouTube-канале.",
 }
 
 # Load the model once at startup (onto CUDA if available).
@@ -34,15 +51,16 @@ def _on_lang_change(lang: str) -> str:
     return DEFAULTS.get(lang, "")
 
 
-def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature):
+def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms):
     if not text or not text.strip():
         raise gr.Error("Please enter some text.")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = settings.output_dir / f"{language}_{ts}.wav"
-    path = ENGINE.synthesize(
+    path = ENGINE.synthesize_long(
         text.strip(),
         language=language,
         out=out,
+        pause_ms=int(pause_ms),
         audio_prompt_path=ref_audio or None,
         exaggeration=exaggeration,
         cfg_weight=cfg_weight,
@@ -72,7 +90,7 @@ with gr.Blocks(title="Chatterbox TTS — EN/PL") as demo:
             ref_audio = gr.Audio(
                 sources=["upload", "microphone"],
                 type="filepath",
-                label="Reference voice (optional — match the language)",
+                label="Reference voice (optional — wav/flac/mp3/m4a; match the language)",
             )
             with gr.Accordion("Advanced", open=False):
                 exaggeration = gr.Slider(0.25, 2.0, value=settings.exaggeration, step=0.05,
@@ -81,6 +99,8 @@ with gr.Blocks(title="Chatterbox TTS — EN/PL") as demo:
                                        label="CFG / pace (0 = language transfer)")
                 temperature = gr.Slider(0.05, 2.0, value=settings.temperature, step=0.05,
                                         label="Temperature")
+                pause_ms = gr.Slider(0, 1500, value=400, step=50,
+                                     label="Pause between sentences (ms) — [pause:N] or || for custom")
             run = gr.Button("Generate", variant="primary")
         with gr.Column():
             audio_out = gr.Audio(label="Output", type="filepath", autoplay=True)
@@ -88,7 +108,7 @@ with gr.Blocks(title="Chatterbox TTS — EN/PL") as demo:
     language.change(_on_lang_change, inputs=language, outputs=text, show_progress=False)
     run.click(
         generate,
-        inputs=[text, language, ref_audio, exaggeration, cfg_weight, temperature],
+        inputs=[text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms],
         outputs=audio_out,
     )
 
