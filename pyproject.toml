@@ -1,0 +1,25 @@
+[project]
+name = "chatterbox-local-tts"
+version = "0.1.0"
+description = "Local Chatterbox Multilingual TTS (EN/PL) configured for RTX 5060 / CUDA"
+requires-python = ">=3.10,<3.13"
+readme = "README.md"
+
+# NOTE: torch/torchaudio are intentionally NOT listed here. They must be
+# installed from the CUDA 12.8 index for Blackwell (RTX 50xx) support:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+# chatterbox-tts pins torch==2.6.0 (no Blackwell); see Requirements.md.
+dependencies = [
+    "chatterbox-tts",
+]
+
+[project.optional-dependencies]
+ollama = ["requests>=2.31"]
+ui = ["gradio==6.8.0"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
