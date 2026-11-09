@@ -37,6 +37,8 @@ def main() -> None:
     p.add_argument("--temperature", type=float, default=None)
     p.add_argument("--pause-ms", type=int, default=400,
                    help="Silence between sentences (ms). Use [pause:N] or || in text for custom gaps.")
+    p.add_argument("--max-words", type=int, default=15,
+                   help="Max words per generated chunk (0 = one sentence per chunk). Higher = fewer, faster calls.")
     p.add_argument("--demo", action="store_true", help="Generate one EN and one PL sample")
     args = p.parse_args()
 
@@ -57,6 +59,7 @@ def main() -> None:
         language=args.lang,
         out=args.out,
         pause_ms=args.pause_ms,
+        max_words=args.max_words,
         audio_prompt_path=args.voice,
         exaggeration=args.exaggeration,
         cfg_weight=args.cfg_weight,

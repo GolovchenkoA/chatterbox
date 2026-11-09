@@ -87,12 +87,16 @@ class TTSEngine:
         exaggeration: float | None = None,
         cfg_weight: float | None = None,
         temperature: float | None = None,
-        trim_db: float | None = 30.0,
+        trim_db: float | None = 25.0,
+        max_words: int | None = 15,
     ) -> Path:
         """Synthesize arbitrarily long text with controllable pauses.
 
         - Splits text into sentences and inserts `sentence_pause_ms` of silence
           between them (defaults to `pause_ms`). Also avoids the ~300-char limit.
+        - `max_words`: pack sentences into chunks of up to this many words per
+          generate() call (None/0 = one sentence per chunk). Larger = fewer,
+          longer clips = faster overall, but pauses only fall between chunks.
         - Insert a custom pause anywhere with a marker:
             `[pause:800]`  -> 800 ms of silence
             `||`           -> `pause_ms` of silence
@@ -110,7 +114,8 @@ class TTSEngine:
         gen = self._gen_kwargs(language, audio_prompt_path, exaggeration, cfg_weight, temperature)
 
         pieces: list = []
-        for kind, val in split_segments(text, pause_ms=pause_ms, sentence_pause_ms=sent_pause):
+        for kind, val in split_segments(text, pause_ms=pause_ms, sentence_pause_ms=sent_pause,
+                                        max_words=max_words or None):
             if kind == "pause":
                 pieces.append(self._silence(val))
             else:
@@ -183,11 +188,41 @@ _SENT_SPLIT = re.compile(r"(?<=[.!?…。！？])\s+|\n+")
 _PAUSE_MARK = re.compile(r"(\[pause:(\d+)\]|\|\|)")
 
 
-def split_segments(text: str, pause_ms: int = 400, sentence_pause_ms: int = 400):
+def _pack_words(sentences: list[str], max_words: int) -> list[str]:
+    """Greedily group sentences into chunks of at most `max_words` words.
+
+    A single sentence longer than `max_words` is split at word boundaries.
+    """
+    chunks: list[str] = []
+    cur: list[str] = []
+    cur_w = 0
+    for s in sentences:
+        words = s.split()
+        if len(words) > max_words:
+            if cur:
+                chunks.append(" ".join(cur))
+                cur, cur_w = [], 0
+            for j in range(0, len(words), max_words):
+                chunks.append(" ".join(words[j:j + max_words]))
+            continue
+        if cur and cur_w + len(words) > max_words:
+            chunks.append(" ".join(cur))
+            cur, cur_w = [], 0
+        cur.append(s)
+        cur_w += len(words)
+    if cur:
+        chunks.append(" ".join(cur))
+    return chunks
+
+
+def split_segments(text: str, pause_ms: int = 400, sentence_pause_ms: int = 400,
+                   max_words: int | None = None):
     """Yield ('speak', chunk) / ('pause', ms) segments from text.
 
-    Explicit markers ([pause:N], ||) produce pauses; everything else is split
-    into sentences separated by `sentence_pause_ms` of silence.
+    Explicit markers ([pause:N], ||) produce pauses and are always hard chunk
+    boundaries. Everything else is split into sentences; if `max_words` is set,
+    sentences are packed into chunks of up to that many words (fewer, larger
+    generate() calls). A `sentence_pause_ms` gap is inserted between chunks.
     """
     segments: list[tuple[str, object]] = []
     for part in _PAUSE_MARK.split(text):
@@ -203,10 +238,11 @@ def split_segments(text: str, pause_ms: int = 400, sentence_pause_ms: int = 400)
         if part.isdigit():  # the capture group of the ms number — skip it
             continue
         sentences = [s.strip() for s in _SENT_SPLIT.split(part) if s.strip()]
-        for i, s in enumerate(sentences):
+        chunks = _pack_words(sentences, max_words) if max_words else sentences
+        for i, c in enumerate(chunks):
             if i > 0:
                 segments.append(("pause", sentence_pause_ms))
-            segments.append(("speak", s))
+            segments.append(("speak", c))
     return segments
 
 

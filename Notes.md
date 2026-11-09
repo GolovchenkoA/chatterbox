@@ -24,6 +24,21 @@ own leading/trailing silence is auto-trimmed first, so the pause you set is the
 real gap — e.g. **0 ms gives back-to-back sentences**. (Engine arg `trim_db=None`
 keeps the model's natural tails if you prefer them.)
 
+## 1b. Chunk size / speed (`max_words`)
+
+Text is generated in chunks (one per sentence by default). Set **Max words per
+chunk** (UI slider) or `--max-words N` (CLI) to pack sentences into bigger chunks:
+
+- **Higher** (e.g. 40–60) = fewer, longer `generate()` calls → **faster overall**,
+  but auto-pauses only fall *between* chunks (pauses inside a chunk come from
+  punctuation). `[pause:N]` / `||` always stay hard boundaries.
+- **0** = one sentence per chunk (most pause control, most model calls).
+- A single sentence longer than the limit is split at word boundaries.
+
+Note: on one GPU, chunks run sequentially — true parallelism doesn't help (the GPU
+is already the bottleneck and concurrent clips would exceed 8 GB VRAM). Bigger
+chunks reduce per-call overhead; that's the real speed lever.
+
 ## 2. Keep chunks sentence-sized
 
 The model is trained on short spans (~≤300 chars). Long paragraphs in a single

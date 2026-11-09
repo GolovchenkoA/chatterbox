@@ -51,9 +51,10 @@ def _on_lang_change(lang: str) -> str:
     return DEFAULTS.get(lang, "")
 
 
-def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms):
+def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms, max_words):
     if not text or not text.strip():
         raise gr.Error("Please enter some text.")
+    print(f"[chatterbox] request: lang={language} max_words={int(max_words)} pause_ms={int(pause_ms)}")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = settings.output_dir / f"{language}_{ts}.wav"
     path = ENGINE.synthesize_long(
@@ -61,6 +62,7 @@ def generate(text, language, ref_audio, exaggeration, cfg_weight, temperature, p
         language=language,
         out=out,
         pause_ms=int(pause_ms),
+        max_words=int(max_words),
         audio_prompt_path=ref_audio or None,
         exaggeration=exaggeration,
         cfg_weight=cfg_weight,
@@ -101,6 +103,8 @@ with gr.Blocks(title="Chatterbox TTS — EN/PL") as demo:
                                         label="Temperature")
                 pause_ms = gr.Slider(0, 1500, value=400, step=50,
                                      label="Pause between sentences (ms) — [pause:N] or || for custom")
+                max_words = gr.Slider(0, 60, value=15, step=1,
+                                      label="Max words per chunk (0 = per sentence; higher = fewer, faster calls)")
             run = gr.Button("Generate", variant="primary")
         with gr.Column():
             audio_out = gr.Audio(label="Output", type="filepath", autoplay=True)
@@ -108,7 +112,7 @@ with gr.Blocks(title="Chatterbox TTS — EN/PL") as demo:
     language.change(_on_lang_change, inputs=language, outputs=text, show_progress=False)
     run.click(
         generate,
-        inputs=[text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms],
+        inputs=[text, language, ref_audio, exaggeration, cfg_weight, temperature, pause_ms, max_words],
         outputs=audio_out,
     )
 
